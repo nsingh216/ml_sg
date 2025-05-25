@@ -2,9 +2,11 @@ import argparse
 import os
 import shutil
 import tarfile
+import time
+import torch
 import urllib.request
 
-import torch
+from datetime import datetime
 from torch.utils.data import DataLoader
 from PIL import Image
 from pycocotools.coco import COCO
@@ -150,10 +152,11 @@ def main(args):
     Args:
         args (argparse.Namespace): Parsed command-line arguments.
     """
-    download("https://s3.amazonaws.com/fast-ai-imageclas/CUB_200_2011.tgz")
-    extract_cub_dataset()
+    # download("https://s3.amazonaws.com/fast-ai-imageclas/CUB_200_2011.tgz")
+    # extract_cub_dataset()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(device)
 
     dataset = CustomCocoDataset(
         root=args.data_path,
@@ -184,8 +187,11 @@ def main(args):
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(params, lr=args.learning_rate, momentum=0.9, weight_decay=0.0005)
 
+    start_time = time.time()
+
     for epoch in range(args.epochs):
         print(f"\nEpoch {epoch + 1}/{args.epochs}")
+        x = 1
         for images, targets in data_loader:
             images = [img.to(device) for img in images]
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
@@ -197,7 +203,13 @@ def main(args):
             losses.backward()
             optimizer.step()
 
-        print(f"Epoch {epoch + 1}, Loss: {losses.item():.4f}")
+            if x % 100 == 0:
+                print(f"Epoch {epoch + 1}, x {x}, Loss: {losses.item():.4f}")
+                print(f"completed {x} of {len(data_loader)} at {datetime.now()}")
+
+            x += 1
+
+        print(f"Epoch {epoch + 1}, Loss: {losses.item():.4f}, completed in {time.time() - start_time:.2f} seconds")   
 
     os.makedirs(args.model_dir, exist_ok=True)
     model_path = os.path.join(args.model_dir, "model.pth")
@@ -219,4 +231,22 @@ if __name__ == '__main__':
 
 
 # pip install pycocotools
-# python train_model_locally.py   --data-path CUB_200_2011/images   --ann-file annotations.json   --batch-size 2   --epochs 1
+# python train.py   --data-path CUB_200_2011/images   --ann-file annotations.json   --batch-size 2   --epochs 1
+
+
+# Epoch 1/1
+# Epoch 1, x 100, Loss: 0.1240
+# completed 100 of 737 at 2025-05-22 00:56:25.159439
+# Epoch 1, x 200, Loss: 0.1443
+# completed 200 of 737 at 2025-05-22 00:57:51.963413
+# Epoch 1, x 300, Loss: 0.1674
+# completed 300 of 737 at 2025-05-22 00:59:18.996707
+# Epoch 1, x 400, Loss: 0.1413
+# completed 400 of 737 at 2025-05-22 01:00:45.812100
+# Epoch 1, x 500, Loss: 0.1140
+# completed 500 of 737 at 2025-05-22 01:02:12.941215
+# Epoch 1, x 600, Loss: 0.0966
+# completed 600 of 737 at 2025-05-22 01:03:39.937438
+# Epoch 1, x 700, Loss: 0.1909
+# completed 700 of 737 at 2025-05-22 01:05:06.970245
+# Epoch 1, Loss: 0.1401, completed in 641.13 seconds
