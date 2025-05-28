@@ -1,5 +1,6 @@
 import argparse
 import os
+import logging
 import shutil
 import tarfile
 import time
@@ -18,6 +19,8 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 # Use the default pretrained weights for Faster R-CNN with ResNet50 backbone
 weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
 
+logger=logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 def download(url: str) -> None:
     """
@@ -152,27 +155,32 @@ def main(args):
     Args:
         args (argparse.Namespace): Parsed command-line arguments.
     """
-    # download("https://s3.amazonaws.com/fast-ai-imageclas/CUB_200_2011.tgz")
-    # extract_cub_dataset()
+
+    logger.debug("Starting training")
+    download("https://s3.amazonaws.com/fast-ai-imageclas/CUB_200_2011.tgz")
+    extract_cub_dataset()
+    logger.debug("Completed data download")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(device)
+    logger.debug(f"Checking device: {device}")
 
     dataset = CustomCocoDataset(
         root=args.data_path,
         annFile=args.ann_file,
         transform=get_transform()
     )
-    print(f"Loaded {len(dataset)} images from {args.data_path}")
+    logger.debug(f"Loaded {len(dataset)} images from {args.data_path}")
 
     data_loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=0,
+        num_workers=4,
+        # pin_memory=True,
+        # persistent_workers=True,
         collate_fn=collate_fn
     )
-    print("DataLoader initialized.")
+    logger.debug("DataLoader initialized.")
 
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=weights)
 
@@ -182,7 +190,7 @@ def main(args):
 
     model.to(device)
     model.train()
-    print("Model loaded and set to training mode.")
+    logger.debug("Model loaded and set to training mode.")
 
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(params, lr=args.learning_rate, momentum=0.9, weight_decay=0.0005)
@@ -190,7 +198,7 @@ def main(args):
     start_time = time.time()
 
     for epoch in range(args.epochs):
-        print(f"\nEpoch {epoch + 1}/{args.epochs}")
+        logger.debug(f"\nEpoch {epoch + 1}/{args.epochs}")
         x = 1
         for images, targets in data_loader:
             images = [img.to(device) for img in images]
@@ -209,12 +217,12 @@ def main(args):
 
             x += 1
 
-        print(f"Epoch {epoch + 1}, Loss: {losses.item():.4f}, completed in {time.time() - start_time:.2f} seconds")   
+        logger.debug(f"Epoch {epoch + 1}, Loss: {losses.item():.4f}, completed in {time.time() - start_time:.2f} seconds")   
 
     os.makedirs(args.model_dir, exist_ok=True)
     model_path = os.path.join(args.model_dir, "model.pth")
     torch.save(model.state_dict(), model_path)
-    print(f"Model saved to {model_path}")
+    logger.debug(f"Model saved to {model_path}")
 
 
 if __name__ == '__main__':
@@ -222,9 +230,9 @@ if __name__ == '__main__':
     parser.add_argument('--data-path', type=str, default='CUB_200_2011/images', help='Path to image folder')
     parser.add_argument('--ann-file', type=str, default='annotations.json', help='Path to COCO annotation JSON file')
     parser.add_argument('--model-dir', type=str, default='/opt/ml/model', help='Directory to save model')
-    parser.add_argument('--epochs', type=int, default=10, help='Number of training epochs')
+    parser.add_argument('--epochs', type=int, default=1, help='Number of training epochs')
     parser.add_argument('--batch-size', type=int, default=16, help='Batch size for training')
-    parser.add_argument('--learning-rate', type=float, default=0.005, help='Learning rate for optimizer')
+    parser.add_argument('--learning-rate', type=float, default=0.1, help='Learning rate for optimizer')
     args = parser.parse_args()
 
     main(args)
